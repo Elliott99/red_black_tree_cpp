@@ -1143,14 +1143,3 @@ void Tree_node::is_legitimate_red_black_tree(){
 	Tree_node::double_red_in_tree=false;
 
 }
-
-
-
-
-
-
-
-//return const * to a map on the heap( must be deleted at end)
-//const so nothing in map can be modified-it's sole purpose is to link 0 to black, and 1 to red
-
-
