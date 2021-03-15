@@ -1,4 +1,4 @@
-using namespace std;
+//using namespace std;
 #include "tree_node.h"
 #include <iostream>
 #include <cstddef>
@@ -9,6 +9,8 @@ using namespace std;
 #include <cstdlib>
 #include <stdlib.h>
 #include <stdexcept>
+#include <functional>
+#include <memory>
 
 //Nil Black Node plays the role of the external nodes in my tree
 //Subclass of Tree_node() superclass, instantiated with the default constructor definition of the Tree_node class
@@ -31,17 +33,18 @@ Tree_node::Tree_node(int v){
 	visited=0;
 	visited_deletion=0;
 	visited_double_red=0;
+	visited_clean_tree=0;
 }
 
 //Defining the constructor for the Tree_node class
 Tree_node::~Tree_node(){
-	cout<<"Deleted node with value "<<this->val<<endl;
+	std::cout<<"Deleted node with value "<<this->val<<endl;
 }
 
 //Defining the constructor for the Nil_Black_Node class. I override the virtual destructor of the Tree_node destructor to give this
 //unique behavior since nil black nodes have no value and therefore it makes no sense to print "Deleted node with X value"
 Nil_Black_Node::~Nil_Black_Node(){
-	cout<<"Deleted external node";
+	std::cout<<"Deleted external node";
 }
 //return const int reference to get the int value of any tree_node (const so we can't modify member value after returning)
 const int& Tree_node::get_val(){
@@ -90,7 +93,7 @@ Tree_node * Tree_node::get_parent(){
 }*/
 
 
-s
+
 //class member functions which return constant reference to value of leftchild and rightchild
 const int& Tree_node::get_lchild_val(){
 	return this->left->val;
@@ -225,12 +228,92 @@ void Tree_node::check_for_double_red(){
 	//if our current caller object is red, and it's parent is red, we have a double red
 	else if (this->color==1 && this->parent->color==1){
 		Tree_node::double_red_in_tree=true;
-		cout<<"Double red discovered: Node with value "<<this->val<<" is red and parent node with value "<<this->parent->val<<" is also red"<<endl;
+		std::cout<<"Double red discovered: Node with value "<<this->val<<" is red and parent node with value "<<this->parent->val<<" is also red"<<endl;
 		return;
 	}
 	this->visited_double_red=1;
 	this->left->check_for_double_red();
 	this->right->check_for_double_red();
+}
+
+//I'm correctly deleting the right objects but still getting memory leaks?
+void Tree_node::print_deletion_vector(){
+	cout<<"Deletion vector contains nodes on tree: "<<endl;
+	for (auto &node:Tree_node::deletion_vector){
+		if (node->is_external_node()){
+			cout<<"External Node "<<"with address "<<&(*node)<<endl;
+		}
+		else{
+			cout<<node->val<<" ";
+			cout<<" Address of node in deletion vector is "<<&(*node)<<endl;
+		}
+	}
+}
+
+vector <Tree_node*> Tree_node::deletion_vector(0);
+
+
+//Does DFS-style traversal
+//adds each a reference to each node and external node it encounters in each path to a the static class attribute vector deletion_vector
+//In the clean_tree method, we loop through this vector and delete each reference to the node that lives on the heap 
+void Tree_node::prepare_tree_for_pruning(){
+	if (this->visited_clean_tree==1){
+		return;
+	}
+	else if (this->is_external_node()){
+		this->visited_clean_tree=1;
+		cout<<endl;
+		cout<<" Memory address of caller object (External Node) is "<<&(*this)<<" and is the external node child of node "<<this->parent->val<<endl;
+		Tree_node::deletion_vector.push_back(&(*this));
+		if (this==this->parent->left){
+		  	if (this->get_sibling()->is_external_node() && this->get_sibling()->visited_clean_tree==0){
+				Tree_node::deletion_vector.push_back(&(*this->get_sibling()));
+				cout<<" Memory address of caller object (External Node) is "<<&(*this->get_sibling())<<" and is the right external node child of node "<<this->parent->val<<endl;
+				this->get_sibling()->visited_clean_tree=1;
+			}
+			else if (!this->get_sibling()->is_external_node()){
+				return;
+			}
+		}
+		else if (this==this->parent->right){
+			if (this->get_sibling()->is_external_node() && this->get_sibling()->visited_clean_tree==0){
+				Tree_node::deletion_vector.push_back(&(*this->get_sibling()));
+				cout<<" Memory address of caller object (External Node) is the "<<&(*this->get_sibling())<<" and is the left external node child of node "<<this->parent->val<<endl;
+				this->get_sibling()->visited_clean_tree=1;
+			}
+			else if (!this->get_sibling()->is_external_node()){
+				return;
+			}
+		}
+	}
+		
+	else if (this->visited_clean_tree==0){
+		cout<<endl;
+		cout<<" Memory address of caller object is "<<&(*this)<<" and value is "<<this->val<<endl;
+		Tree_node::deletion_vector.push_back(&(*this));
+		//delete(this);
+	}
+	this->visited_clean_tree=1;
+	this->left->prepare_tree_for_pruning();
+	this->right->prepare_tree_for_pruning();
+}
+
+//clean tree:static method which deletes all pointers to nodes on the tree that is rooted at node root
+//makes call to prepare_tree_for_pruning, which places pointers to all nodes on the tree 
+void Tree_node::clean_tree(Tree_node * root){
+	if (!root->is_root()){
+		throw std::invalid_argument("Argument must be root");
+	}
+	root->prepare_tree_for_pruning();
+	cout<<endl;
+	Tree_node::print_deletion_vector();
+	cout<<endl;
+	for (auto &node:Tree_node::deletion_vector){
+		delete(node);
+	}
+	//}
+	Tree_node::deletion_vector.clear();
+	cout<<endl<<"Deleted all nodes off in tree off of heap, including external nodes"<<endl;
 }
 
 //member getter method for the static double_red_in_tree boolean which indicates if our tree has a double red case
@@ -299,6 +382,8 @@ Tree_node * Tree_node::balance_insert(){
 					}
 					else if (tmp_grandpa->is_root()){
 						this->parent->parent=NULL;
+						Tree_node *brother=this->parent->right;
+						tmp_grandpa->left=brother;
 					}
 
 					if (!this->parent->right->is_external_node()){
@@ -347,6 +432,8 @@ Tree_node * Tree_node::balance_insert(){
 					}
 					else if (tmp_grandpa->is_root()){
 						this->parent=NULL;
+						Tree_node *brother=this->parent->left;
+						tmp_grandpa->right=brother;
 					}
 
 					if (!this->parent->left->is_external_node()){
@@ -505,10 +592,10 @@ void Tree_node::right_rotation(){
 		this->parent->parent=NULL;
 		return;
 	}
-
 	this->left->parent=this->parent;
 	this->parent=this->left;
 	this->parent->parent->left=this->left;
+
 	this->left=this->right->left;
 	this->parent->right=this;
 }
@@ -1112,34 +1199,36 @@ void Tree_node::is_legitimate_red_black_tree(){
 	this->check_for_double_red();
 	//print out a number of different messages based on tree's adherence to double red, uniform black depth, and black root properties
 	if (Tree_node::get_balanced_boolean() && !Tree_node::get_double_red_boolean() && this->get_color()==0){
-		cout<<"This is a balanced red black tree. All paths have equal black depth of length "<<black_depth_of_one_path<<" there are no double reds and the root is black";
+		std::cout<<"This is a balanced red black tree. All paths have equal black depth of length "<<black_depth_of_one_path<<" there are no double reds and the root is black";
 	}
 	else if (!Tree_node::get_balanced_boolean() && !Tree_node::get_double_red_boolean() && this->get_color()==0){
-		cout<<"This is not a balanced red black tree. Not all paths have an equal black depth of length "<<black_depth_of_one_path<<" there are no double reds, and the root is black";
+		std::cout<<"This is not a balanced red black tree. Not all paths have an equal black depth of length "<<black_depth_of_one_path<<" there are no double reds, and the root is black";
 	}
 	else if (Tree_node::get_balanced_boolean() && !Tree_node::get_double_red_boolean() && this->get_color()==1){
-		cout<<"This is not a balanced red black tree. All paths have an equal black depth of length "<<black_depth_of_one_path<<" and there are no double reds but the root is red";
+		std::cout<<"This is not a balanced red black tree. All paths have an equal black depth of length "<<black_depth_of_one_path<<" and there are no double reds but the root is red";
 	}
 	else if (!Tree_node::get_balanced_boolean() && !Tree_node::get_double_red_boolean() && this->get_color()==1){
-		cout<<"This is not a balanced red black tree. Not all paths have an equal black depth of length "<<black_depth_of_one_path<<" there are no double reds and root is red";
+		std::cout<<"This is not a balanced red black tree. Not all paths have an equal black depth of length "<<black_depth_of_one_path<<" there are no double reds and root is red";
 	}
 	else if (Tree_node::get_balanced_boolean() && Tree_node::get_double_red_boolean() && this->get_color()==0){
-		cout<<"This is not a balanced red black tree. All paths have equal black depth of length "<<black_depth_of_one_path<<" but there is a double red and the root is black";
+		std::cout<<"This is not a balanced red black tree. All paths have equal black depth of length "<<black_depth_of_one_path<<" but there is a double red and the root is black";
 	}
 	else if (!Tree_node::get_balanced_boolean() && Tree_node::get_double_red_boolean() && this->get_color()==0){
-		cout<<"This is not a balanced red black tree. Not all paths have equal black depth of length "<<black_depth_of_one_path<<" ,there is a double red and the root is black";
+		std::cout<<"This is not a balanced red black tree. Not all paths have equal black depth of length "<<black_depth_of_one_path<<" ,there is a double red and the root is black";
 	}
 
 	else if (!Tree_node::get_balanced_boolean() && Tree_node::get_double_red_boolean() && this->get_color()==1){
-		cout<<"This is not a balanced red black tree. Not all paths have equal black depth of length "<<black_depth_of_one_path<<" ,there is a double red and the root is red";
+		std::cout<<"This is not a balanced red black tree. Not all paths have equal black depth of length "<<black_depth_of_one_path<<" ,there is a double red and the root is red";
 	}
 	else if (Tree_node::get_balanced_boolean() && Tree_node::get_double_red_boolean() && this->get_color()==1){
-		cout<<"This is not a balanced red black tree. All paths have equal black depth of length "<<black_depth_of_one_path<<" ,but there is a double red and the root is red";
+		std::cout<<"This is not a balanced red black tree. All paths have equal black depth of length "<<black_depth_of_one_path<<" ,but there is a double red and the root is red";
 	}
 
 	//reset all static class attributes: A call to this method essentially indicates we are done adding or deleting to this tree so we reset all static attributes to their original values
 	Tree_node::black_depth_count=0;
 	Tree_node::is_balanced_tree=true;
 	Tree_node::double_red_in_tree=false;
-
+	Tree_node::successor=NULL;
 }
+
+
