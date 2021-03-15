@@ -1,6 +1,4 @@
 using namespace std;
-#include "colors.h"
-#include <map>
 #include <string>
 #include <vector>
 
@@ -36,6 +34,8 @@ public:
 	static Tree_node * get_node_for_deletion();
 	static bool get_balanced_boolean();
 	static bool get_double_red_boolean();
+	static void print_deletion_vector();
+	static void clean_tree(Tree_node * root);
 	Tree_node * get_sibling();
 	Tree_node * get_left_nephew();
 	Tree_node * get_right_nephew();
@@ -47,21 +47,24 @@ public:
 	void right_rotation();
 	void left_rotation();
 	bool is_external_node();
+	void prepare_tree_for_pruning();
 	void set_val(int v){
 		val=v;
 	}
-	virtual ~Tree_node();
+	~Tree_node();
 	//definition of the default constructor
 	//This constructor initializes no "val" value: This is because it will play the role of an external node
-	//External nodes are black and have no value
+	//External nodes are black and have value -1
 	//The Nil Black Node subclass is derived from this constructor definition
 	Tree_node(){
 		parent=NULL;
+		val=-1;
 		left=this;
 		right=this;
 		color=0;
 		visited=0;
 		visited_deletion=0;
+		visited_clean_tree=0;
 }
 
 
@@ -82,11 +85,13 @@ protected:
 	static int black_depth_count;
 	static bool is_balanced_tree;
 	static bool double_red_in_tree;
+	static vector <Tree_node*> deletion_vector;
 	int val;
 	int color;
 	int visited;
 	int visited_deletion;
 	int visited_double_red;
+	int visited_clean_tree;
 };
 
 class Nil_Black_Node:public Tree_node{
